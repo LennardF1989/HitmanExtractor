@@ -9,6 +9,8 @@ namespace HitmanExtractor
 {
     public static class Program
     {
+        private static readonly List<string> FoundFileType = new List<string>();
+        
         class HitmanException : Exception
         {
             public HitmanException(string message)
@@ -159,6 +161,9 @@ namespace HitmanExtractor
 
                 var fileEntry = fileEntries[i];
                 fileEntry.FileType = fileType;
+                
+                if (!FoundFileType.Contains(fileType)) FoundFileType.Add(fileType);
+                
                 fileEntry.DecompressedFileSize = decompressedSize;
 
                 fileEntry.FileTable2EntryOffset = (ulong) fileTableOffset;
@@ -190,7 +195,7 @@ namespace HitmanExtractor
 
         private static void ExtractFileEntryList(BinaryReader binaryReader, List<FileEntry> fileEntryList, string outputDirectory, List<string> filters)
         {
-            Directory.CreateDirectory(outputDirectory);
+            foreach (var extension in FoundFileType) Directory.CreateDirectory($"{outputDirectory}/{new string(extension.ToCharArray().Reverse().ToArray())}");
 
             foreach (var fileEntry in fileEntryList)
             {
@@ -226,7 +231,7 @@ namespace HitmanExtractor
 
                 var fileExtension = new string(fileEntry.FileType.ToCharArray().Reverse().ToArray());
 
-                File.WriteAllBytes(Path.Combine(outputDirectory, $"{fileEntry.Hash:X16}.{fileExtension.ToLower()}"), bytes);
+                File.WriteAllBytes(Path.Combine($"{outputDirectory}/{fileExtension}", $"{fileEntry.Hash:X16}.{fileExtension.ToLower()}"), bytes);
 
                 Console.WriteLine($"EXTRACTED: {fileEntry.FileType} => {fileEntry.Hash} @ {fileEntry.FileOffset} ({fileEntry.ActualFileSize} / {fileEntry.DecompressedFileSize})");
             }
