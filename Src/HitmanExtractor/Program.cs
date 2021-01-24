@@ -25,9 +25,10 @@ namespace HitmanExtractor
             public ulong Hash { get; set; }
             public uint FileOffset { get; set; }
             public uint FileSize { get; set; }
-            
+
             public bool IsEncrypted => (FileSize & 0x80000000) > 0;
-            public uint ActualFileSize => IsEncrypted ? FileSize & 0x3fffffff : FileSize;
+            public bool IsCompressed => CompressedFileSize > 0;
+            public uint CompressedFileSize => FileSize & 0x3fffffff;
 
             public string FileType { get; set; }
             public uint DecompressedFileSize { get; set; }
@@ -43,7 +44,7 @@ namespace HitmanExtractor
         private const int BASE_FILETABLE2_ENTRY_SIZE = 24;
 
         private static readonly byte[] _xorCypher = { 0xDC, 0x45, 0xA6, 0x9C, 0xD3, 0x72, 0x4C, 0xAB };
-        
+
         public static void Main(string[] args)
         {
             try
@@ -84,6 +85,8 @@ namespace HitmanExtractor
                 }
                 else if (args[0] == "extract")
                 {
+                    Console.WriteLine("Extracting file entries...");
+
                     ExtractFileEntryList(binaryReader, fileEntryList, args[2], args.Skip(3).ToList());
                 }
             }
@@ -119,7 +122,7 @@ namespace HitmanExtractor
 
                 var hash = binaryReader.ReadUInt64();
                 var fileOffset = binaryReader.ReadUInt32();
-                
+
                 //NOTE: Skip 4 bytes
                 binaryReader.BaseStream.Position += 4;
 
@@ -131,7 +134,7 @@ namespace HitmanExtractor
                     FileOffset = fileOffset,
                     FileSize = fileSize,
 
-                    FileTable1EntryOffset = (ulong) fileTableOffset,
+                    FileTable1EntryOffset = (ulong)fileTableOffset,
                     FileTable1EntrySize = BASE_FILETABLE1_ENTRY_SIZE
                 };
 
@@ -166,7 +169,7 @@ namespace HitmanExtractor
                 
                 fileEntry.DecompressedFileSize = decompressedSize;
 
-                fileEntry.FileTable2EntryOffset = (ulong) fileTableOffset;
+                fileEntry.FileTable2EntryOffset = (ulong)fileTableOffset;
                 fileEntry.FileTable2EntrySize = BASE_FILETABLE2_ENTRY_SIZE + additionaEntrySize;
             }
 
@@ -189,7 +192,9 @@ namespace HitmanExtractor
                     continue;
                 }
 
-                Console.WriteLine($"{fileEntry.FileType} => {fileEntry.Hash} @ {fileEntry.FileOffset} ({fileEntry.ActualFileSize} / {fileEntry.DecompressedFileSize})");
+                Console.WriteLine(
+                    $"{fileEntry.FileType} => {fileEntry.Hash:X16} @ {fileEntry.FileOffset} (IsCompressed: {fileEntry.IsCompressed} | IsEncrypted: {fileEntry.IsEncrypted} | Size: {fileEntry.CompressedFileSize} / {fileEntry.DecompressedFileSize})"
+                );
             }
         }
 
@@ -204,16 +209,11 @@ namespace HitmanExtractor
                     continue;
                 }
 
-                if (fileEntry.ActualFileSize == 0)
-                {
-                    Console.WriteLine($"SKIPPED: {fileEntry.FileType} => {fileEntry.Hash} @ {fileEntry.FileOffset} ({fileEntry.ActualFileSize} / {fileEntry.DecompressedFileSize})");
-
-                    continue;
-                }
-
                 binaryReader.BaseStream.Position = fileEntry.FileOffset;
 
-                var bytes = binaryReader.ReadBytes((int) fileEntry.ActualFileSize);
+                var bytes = binaryReader.ReadBytes(
+                    (int)(fileEntry.IsCompressed ? fileEntry.CompressedFileSize : fileEntry.DecompressedFileSize)
+                );
 
                 if (fileEntry.IsEncrypted)
                 {
@@ -225,15 +225,20 @@ namespace HitmanExtractor
                     }
                 }
 
-                bytes = LZ4Codec.Decode(
-                    bytes, 0, bytes.Length, (int) fileEntry.DecompressedFileSize
-                );
+                if (fileEntry.IsCompressed)
+                {
+                    bytes = LZ4Codec.Decode(
+                        bytes, 0, bytes.Length, (int)fileEntry.DecompressedFileSize
+                    );
+                }
 
                 var fileExtension = new string(fileEntry.FileType.ToCharArray().Reverse().ToArray());
 
                 File.WriteAllBytes(Path.Combine($"{outputDirectory}/{fileExtension}", $"{fileEntry.Hash:X16}.{fileExtension.ToLower()}"), bytes);
 
-                Console.WriteLine($"EXTRACTED: {fileEntry.FileType} => {fileEntry.Hash} @ {fileEntry.FileOffset} ({fileEntry.ActualFileSize} / {fileEntry.DecompressedFileSize})");
+                Console.WriteLine(
+                    $"{fileEntry.FileType} => {fileEntry.Hash:X16} @ {fileEntry.FileOffset} (IsCompressed: {fileEntry.IsCompressed} | IsEncrypted: {fileEntry.IsEncrypted} | Size: {fileEntry.CompressedFileSize} / {fileEntry.DecompressedFileSize})"
+                );
             }
         }
     }

@@ -38,6 +38,6 @@ HitmanExtractor.exe extract chunk0.rpkg chunk0 ULBC PMET
 This would extract all files of the types ULBC and PMET found in chunk0.rpkg to the directory chunk0. By omitting the filters, all files are extracted.
 
 # Notes
-The Hitman 3 .rpkg fileformat has not been fully sorted out yet. In result, some assets report as 0 bytes and are not extractable. For example, this is currently the case for the types TXET and ENIL (.text and .line respectively).
-
 The chunk packages do not actually contain any filenames. The tool will have to be extended with support for "hash to filename" mappings.
+
+The extractor does not support reimporting assets (yet).
